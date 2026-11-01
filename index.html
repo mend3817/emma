@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>㊙️㊙️</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MQTT over WSS -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#06080d',
+                        neonCyan: '#00e5ff',
+                        neonGreen: '#00ff88',
+                        bankerRed: '#ef4444',
+                        playerBlue: '#3b82f6',
+                        tieGreen: '#10b981'
+                    },
+                    boxShadow: {
+                        'neon-cyan': '0 0 10px rgba(0, 229, 255, 0.25)',
+                        'neon-green': '0 0 10px rgba(0, 255, 136, 0.25)',
+                        'card-glow': '0 0 15px rgba(15, 23, 42, 0.8)'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        html, body {
+            height: 100%;
+            height: 100dvh;
+            overflow: hidden;
+        }
+        body {
+            background-color: #06080d;
+            background-image: 
+                radial-gradient(at 50% 0%, rgba(0, 229, 255, 0.08) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(0, 255, 136, 0.05) 0px, transparent 50%);
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            touch-action: manipulation;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 229, 255, 0.2);
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 🔒 密碼鎖遮罩樣式 */
+        #loginOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; height: 100dvh;
+            background: rgba(7, 9, 13, 0.94); z-index: 9999; display: flex; justify-content: center; align-items: center; padding: 16px;
+        }
+        .login-card {
+            background: #0f172a; border: 1.5px solid #00e5ff; border-radius: 14px;
+            padding: 20px 16px; width: 100%; max-width: 340px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        }
+        .login-title { font-size: 1.15rem; font-weight: 900; color: #00ff88; margin-bottom: 6px; }
+        .login-desc { font-size: 0.75rem; color: #94a3b8; margin-bottom: 14px; }
+        .login-input {
+            width: 100%; background: #06080d; border: 1px solid #1e293b; border-radius: 8px;
+            padding: 10px 12px; font-size: 1.1rem; color: #FFF; text-align: center; letter-spacing: 2px; margin-bottom: 10px;
+        }
+        .login-input:focus { outline: none; border-color: #00ff88; box-shadow: 0 0 8px rgba(0,255,136,0.4); }
+        .login-btn {
+            width: 100%; background: linear-gradient(90deg, #0284c7, #00ff88); border: none;
+            border-radius: 8px; padding: 10px; font-size: 0.95rem; font-weight: bold; color: #07090D; cursor: pointer;
+        }
+        .temp-code-box {
+            margin-top: 10px; padding: 8px; background: #1e293b; border: 1px dashed #facc15;
+            border-radius: 8px; display: none; text-align: left;
+        }
+        .temp-code-title { font-size: 0.7rem; color: #facc15; font-weight: bold; margin-bottom: 6px; text-align: center; }
+        .temp-codes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+        .temp-code-item {
+            background: #090d16; border: 1px solid #334155; border-radius: 6px; padding: 5px 6px;
+            font-family: monospace; font-size: 0.85rem; font-weight: 900; color: #FFF; letter-spacing: 1px;
+            text-align: center; display: flex; justify-content: space-between; align-items: center;
+        }
+        .temp-code-item.used { color: #475569; text-decoration: line-through; border-color: #1e293b; }
+        .temp-code-status { font-size: 0.55rem; font-weight: normal; color: #94a3b8; }
+
+        /* 📡 連動面板 */
+        .sync-panel-box {
+            background: rgba(15, 23, 42, 0.95); border: 1px solid #facc15; border-radius: 8px;
+            padding: 6px 10px; margin-bottom: 4px; display: none; font-size: 0.7rem;
+        }
+        .sync-panel-box.active { display: block; }
+
+        /* 記牌按鈕高寬黃金比例 */
+        .card-btn {
+            height: 44px;
+            background: #111827;
+            border: 1px solid #374151;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.12s ease;
+        }
+        .card-btn:hover {
+            border-color: #00e5ff;
+            background: #1f2937;
+        }
+        .card-btn:active {
+            transform: scale(0.94);
+        }
+    </style>
+</head>
+<body class="text-gray-100 h-[100dvh] p-1.5 flex flex-col justify-between gap-1 max-w-7xl mx-auto overflow-hidden">
+
+    <!-- 🔒 密碼驗證遮罩 -->
+    <div id="loginOverlay">
+        <div class="login-card">
+            <div class="login-title">🔒 通關密語驗證</div>
+            <div class="login-desc">請輸入主密碼或當日 6 位數臨時通行碼</div>
+            <input type="password" id="txtPassword" class="login-input" placeholder="••••••" onkeydown="if(event.key==='Enter') checkPassword()">
+            <button type="button" class="login-btn" onclick="checkPassword()">解鎖進入系統</button>
+            
+            <div id="tempCodeBox" class="temp-code-box">
+                <div class="temp-code-title">🎫 今日 6 組跨裝置通用臨時通行碼:</div>
+                <div id="tempCodesGrid" class="temp-codes-grid"></div>
+                <div style="font-size: 0.62rem; color: #94a3b8; margin-top: 6px; text-align:center;">畫面將在 6 秒後自動進入系統...</div>
+            </div>
+            <div id="loginError" style="color:#ef4444; font-size:0.75rem; margin-top:8px; font-weight:bold;"></div>
+        </div>
+    </div>
+
+    <!-- 🔄 單張卡牌替換精簡彈窗選單 (微縮尺寸) -->
+    <div id="cardReplaceModal" class="fixed inset-0 bg-black/80 z-[10000] hidden flex justify-center items-center p-3">
+        <div class="bg-slate-900 border border-cyan-500 rounded-lg p-2.5 w-full max-w-[240px] text-center shadow-2xl">
+            <div class="text-neonCyan font-black text-xs mb-0.5">🔄 選擇替換的新點數</div>
+            <div id="replaceModalSub" class="text-gray-400 text-[9px] mb-2">請選擇欲替換的點數</div>
+            <div class="grid grid-cols-3 gap-1 mb-2">
+                <button onclick="confirmCardReplace(1, 'A')" class="py-1 bg-gray-800 hover:bg-gray-700 text-red-500 font-black text-xs rounded border border-gray-700">A</button>
+                <button onclick="confirmCardReplace(2, '2')" class="py-1 bg-gray-800 hover:bg-gray-700 text-white font-black text-xs rounded border border-gray-700">2</button>
+                <button onclick="confirmCardReplace(3, '3')" class="py-1 bg-gray-800 hover:bg-gray-700 text-red-500 font-black text-xs rounded border border-gray-700">3</button>
+                <button onclick="confirmCardReplace(4, '4')" class="py-1 bg-gray-800 hover:bg-gray-700 text-white font-black text-xs rounded border border-gray-700">4</button>
+                <button onclick="confirmCardReplace(5, '5')" class="py-1 bg-gray-800 hover:bg-gray-700 text-red-500 font-black text-xs rounded border border-gray-700">5</button>
+                <button onclick="confirmCardReplace(6, '6')" class="py-1 bg-gray-800 hover:bg-gray-700 text-white font-black text-xs rounded border border-gray-700">6</button>
+                <button onclick="confirmCardReplace(7, '7')" class="py-1 bg-gray-800 hover:bg-gray-700 text-amber-400 font-black text-xs rounded border border-gray-700">7</button>
+                <button onclick="confirmCardReplace(8, '8')" class="py-1 bg-gray-800 hover:bg-gray-700 text-amber-400 font-black text-xs rounded border border-gray-700">8</button>
+                <button onclick="confirmCardReplace(9, '9')" class="py-1 bg-gray-800 hover:bg-gray-700 text-amber-400 font-black text-xs rounded border border-gray-700">9</button>
+                <button onclick="confirmCardReplace(0, '0')" class="py-1 bg-gray-800 hover:bg-gray-700 text-amber-400 font-black text-xs rounded border border-gray-700">0</button>
+                <button onclick="deleteTargetCardOnly()" class="py-1 bg-red-950 hover:bg-red-900 text-red-300 font-bold text-[10px] rounded border border-red-700">🗑️ 刪除</button>
+                <button onclick="closeReplaceModal()" class="py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold text-[10px] rounded border border-gray-600">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📱 主應用內容 (雙欄並排) -->
+    <div id="appContainer" class="h-full flex flex-col justify-between gap-1 overflow-hidden" style="display: none;">
+
+        <!-- 1. 頂部抬頭：標誌 + 本金 + 限紅 + 牌靴 + 連動按鈕 -->
+        <header class="glass-panel rounded-lg px-2.5 py-1 flex justify-between items-center gap-2 shrink-0">
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-black text-neonCyan tracking-wider">㊙️㊙️</span>
+                <div class="bg-black/50 px-2 py-0.5 rounded border border-gray-800 flex items-center gap-1 text-[11px]">
+                    <span class="text-gray-400 text-[9px]">本金</span>
+                    <input type="number" id="input-capital" value="10000" onchange="resetCapitalSettings()" class="w-16 text-center bg-gray-900 border border-cyan-500/30 text-neonCyan font-bold rounded outline-none py-0.5 text-xs">
+                </div>
+                <div class="bg-black/50 px-2 py-0.5 rounded border border-gray-800 flex items-center gap-1 text-[11px]">
+                    <span class="text-gray-400 text-[9px]">限紅</span>
+                    <input type="number" id="input-max-bet" value="3000" onchange="resetCapitalSettings()" class="w-16 text-center bg-gray-900 border border-cyan-500/30 text-yellow-400 font-bold rounded outline-none py-0.5 text-xs">
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap text-[11px]">
+                <div class="flex items-center gap-1 bg-black/50 px-2 py-0.5 rounded border border-gray-800">
+                    <span class="text-gray-400 text-[9px]">牌靴進度</span>
+                    <span id="shoe-progress" class="font-mono text-neonGreen font-bold text-xs">0 / 416</span>
+                </div>
+                <button onclick="toggleSyncPanel()" class="px-2 py-0.5 rounded font-bold border bg-yellow-950/60 text-yellow-300 border-yellow-500/50 hover:bg-yellow-900/80 transition cursor-pointer">
+                    📡 雙機連動
+                </button>
+            </div>
+        </header>
+
+        <!-- 📡 雙機連動控制面板 -->
+        <div id="syncPanel" class="sync-panel-box shrink-0">
+            <div class="flex justify-between font-bold text-yellow-400 mb-1 items-center">
+                <span>📡 雙向接力連動（跨平台 0 秒同步操作）</span>
+                <span id="syncStatus" class="text-gray-400 font-bold">⚪ 未連線</span>
+            </div>
+            <div class="flex gap-2 items-center flex-wrap">
+                <button type="button" class="px-2 py-0.5 rounded bg-green-950 text-neonGreen border border-green-500 font-bold text-xs" onclick="createRoom()">➕ 創房</button>
+                <span class="text-gray-400 text-xs">或</span>
+                <input type="text" id="txtRoomId" class="bg-black/60 border border-cyan-500/50 rounded text-center text-white px-2 py-0.5 w-16 font-bold tracking-widest text-xs" placeholder="4位房號" maxlength="4">
+                <button type="button" class="px-2 py-0.5 rounded bg-cyan-950 text-neonCyan border border-cyan-500 font-bold text-xs" onclick="joinRoom()">🔗 加入同房</button>
+            </div>
+        </div>
+
+        <!-- 2. 主雙欄區域 -->
+        <main class="grid grid-cols-2 gap-1.5 flex-1 min-h-0 overflow-hidden">
+
+            <!-- ================= 左半邊：資金看板、下三路 AI 與百家大路 ================= -->
+            <section class="flex flex-col gap-1 h-full min-h-0 overflow-y-auto no-scrollbar">
+                
+                <!-- 1. 資金看板 (配注策略獨立成行) -->
+                <div class="glass-panel rounded-lg p-1 text-[11px] shrink-0 space-y-1">
+                    <div class="grid grid-cols-3 gap-1 text-center items-center">
+                        <div class="bg-black/50 p-0.5 rounded border border-gray-800">
+                            <span class="text-gray-400 block text-[8px]">累積損益</span>
+                            <span id="display-net-profit" class="font-bold text-bankerRed text-xs">0</span>
+                        </div>
+                        <div class="bg-black/50 p-0.5 rounded border border-gray-800">
+                            <span class="text-gray-400 block text-[8px]">當前資產</span>
+                            <span id="display-current-bankroll" class="font-extrabold text-neonGreen text-xs">10,000</span>
+                        </div>
+                        <div class="bg-black/50 p-0.5 rounded border border-yellow-500/40">
+                            <span class="text-yellow-400 block text-[8px]">下局建議注碼</span>
+                            <span id="display-next-bet" class="font-black text-yellow-300 text-xs">100</span>
+                        </div>
+                    </div>
+                    <!-- 配注策略獨立滿版成行 -->
+                    <div class="bg-black/50 p-1 rounded border border-gray-800 flex items-center justify-between">
+                        <span class="text-gray-400 text-[9px] font-bold">配注策略：</span>
+                        <select id="select-strategy" onchange="updateStrategyOnly()" class="bg-gray-900 border border-cyan-500/40 text-yellow-300 font-bold rounded outline-none text-xs px-2 py-0.5">
+                            <option value="parlay2" selected>🔥 2連勝短勝進</option>
+                            <option value="flat">🛡️ 固定平注</option>
+                            <option value="parlay5">🚀 5連勝大過關</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 2. 下三路與 EVA AI 分析區 -->
+                <div class="glass-panel rounded-lg p-1.5 text-[10px] shrink-0 space-y-1">
+                    <div class="grid grid-cols-3 gap-1 text-[10px] text-center">
+                        <div class="bg-black/40 p-0.5 rounded border border-gray-800">大眼仔：<span id="stat-big-eye" class="font-bold text-neonCyan">-</span></div>
+                        <div class="bg-black/40 p-0.5 rounded border border-gray-800">小路：<span id="stat-small-road" class="font-bold text-neonCyan">-</span></div>
+                        <div class="bg-black/40 p-0.5 rounded border border-gray-800">曱甴路：<span id="stat-cockroach" class="font-bold text-neonCyan">-</span></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-1 text-center">
+                        <div class="bg-black/50 p-1 rounded border border-cyan-500/30">
+                            <span class="text-[9px] text-gray-400 block">建議方向</span>
+                            <span id="ai-recommendation" class="text-base font-black text-neonCyan">觀望</span>
+                        </div>
+                        <div class="bg-black/50 p-1 rounded border border-green-500/30">
+                            <span class="text-[9px] text-gray-400 block">信心指數</span>
+                            <span id="ai-confidence" class="text-base font-black text-neonGreen">50%</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-[9px] text-gray-400 border-t border-gray-800/80 pt-0.5 px-0.5">
+                        <span>牌路／牌庫特徵：<span id="ai-pattern" class="text-emerald-400 font-semibold">等待數據</span></span>
+                        <span id="ai-cable-stage" class="text-yellow-300 font-bold">第 1 層 (100)</span>
+                    </div>
+                </div>
+
+                <!-- 3. 百家大路矩陣 (鎖定 142px 精準高度) -->
+                <div class="glass-panel rounded-lg p-1.5 flex flex-col justify-start flex-1 min-h-[175px]">
+                    <div class="flex flex-col gap-1 h-full min-h-0">
+                        <div class="grid grid-cols-3 gap-1 text-[10px] shrink-0">
+                            <button id="tab-spectate" onclick="setMode('spectate')" class="py-1 rounded font-bold border bg-cyan-950 text-neonCyan border-cyan-500 shadow-neon-cyan transition">👁️ 觀望</button>
+                            <button id="tab-betting" onclick="setMode('betting')" class="py-1 rounded font-bold border bg-gray-900 text-gray-400 border-gray-800 transition">💵 下注</button>
+                            <button onclick="clearMatrix()" class="py-1 rounded font-bold border bg-gray-800/60 hover:bg-gray-700 text-gray-300 border-gray-600/50 transition">🗑️ 清空</button>
+                        </div>
+
+                        <div class="flex justify-between items-center text-[10px] shrink-0">
+                            <span class="font-bold text-neonCyan">百家大路矩陣 <span class="text-yellow-400 font-normal">（💡點擊單球即刪除）</span></span>
+                        </div>
+
+                        <!-- 固定 142px 高度 -->
+                        <div id="road-matrix" class="bg-black/70 rounded p-1.5 h-[142px] overflow-x-auto overflow-y-hidden no-scrollbar border border-gray-800 grid grid-rows-[repeat(6,20px)] grid-flow-col gap-[2px] auto-cols-[20px] content-start items-center">
+                            <!-- JS 動態生成 -->
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- ================= 右半邊：3x4 記牌面板 + 勝負結算 + 紀錄 (垂直完全拉滿) ================= -->
+            <section class="flex flex-col gap-1 h-full min-h-0 overflow-hidden">
+
+                <!-- 記牌面板區 (銷牌鈕升級為電競紫) -->
+                <div class="glass-panel rounded-lg p-1.5 shrink-0">
+                    <div class="flex justify-between items-center text-[10px] text-gray-400 mb-1 font-bold">
+                        <span>🃏 直覺記牌面板</span>
+                        <span class="text-cyan-400/80">點擊即發牌</span>
+                    </div>
+
+                    <!-- 3x4 精準宮格 -->
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <button class="card-btn" onclick="inputCard('A', 1)">
+                            <span class="text-sm font-black text-red-500 leading-none">A</span>
+                            <span id="rem-1" class="text-[9px] text-slate-400 mt-0.5">剩 32</span>
+                        </button>
+                        <button class="card-btn" onclick="inputCard('2', 2)">
+                            <span class="text-sm font-black text-slate-100 leading-none">2</span>
+                            <span id="rem-2" class="text-[9px] text-slate-400 mt-0.5">剩 32</span>
+                        </button>
+                        <button class="card-btn" onclick="inputCard('3', 3)">
+                            <span class="text-sm font-black text-red-500 leading-none">3</span>
+                            <span id="rem-3" class="text-[9px] text-slate-400 mt-0.5">剩 32</span>
+                        </button>
+
+                        <button class="card-btn" onclick="inputCard('4', 4)">
+                            <span class="text-sm font-black text-slate-100 leading-none">4</span>
+                            <span id="rem-4" class="text-[9px] text-slate-400 mt-0.5">剩 32</span>
+                        </button>
+                        <button class="card-btn" onclick="inputCard('5', 5)">
+                            <span class="text-sm font-black text-red-500 leading-none">5</span>
+                            <span id="rem-5" class="text-[9px] text-slate-400 mt-0.5">剩 32</span>
+                        </button>
+                        <button class="card-btn" onclick="inputCard('6', 6)">
+                            <span class="text-sm font-black text-slate-100 leading-none">6</span>
+                            <span id="rem-6" class="text-[9px] text-slate-400 mt-0.5">剩 32</span>
+                        </button>
+
+                        <button class="card-btn" onclick="inputCard('7', 7)">
+                            <span class="text-sm font-black text-amber-400 leading-none">7</span>
+                            <span id="rem-7" class="text-[9px] text-slate-400 mt-0.5">剩 32</span>
+                        </button>
+                        <button class="card-btn" onclick="inputCard('8', 8)">
+                            <span class="text-sm font-black text-amber-400 leading-none">8</span>
+                            <span id="rem-8" class="text-[9px] text-slate-400 mt-0.5">剩 32</span>
+                        </button>
+                        <button class="card-btn" onclick="inputCard('9', 9)">
+                            <span class="text-sm font-black text-amber-400 leading-none">9</span>
+                            <span id="rem-9" class="text-[9px] text-slate-400 mt-0.5">剩 32</span>
+                        </button>
+
+                        <button class="card-btn" onclick="inputCard('0', 0)">
+                            <span class="text-sm font-black text-amber-400 leading-none">0</span>
+                            <span id="rem-0" class="text-[9px] text-slate-400 mt-0.5">剩 128</span>
+                        </button>
+                        <!-- 銷牌 (Ø) 升級電競霓虹紫配色 -->
+                        <button class="card-btn !border-purple-500/60 !bg-purple-950/40 hover:!bg-purple-900/60" onclick="burnCard()">
+                            <span class="text-sm font-black text-purple-400 leading-none">Ø</span>
+                            <span class="text-[9px] text-purple-300 mt-0.5">銷牌</span>
+                        </button>
+                        <button class="card-btn" onclick="popLastBufferCard()">
+                            <span class="text-sm font-black text-slate-300 leading-none">↩️</span>
+                            <span class="text-[9px] text-slate-400 mt-0.5">撤銷</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 記錄牌局與一鍵勝負結算區 -->
+                <div class="glass-panel rounded-lg p-1.5 flex-1 flex flex-col min-h-0 overflow-hidden">
+                    <div class="text-[10px] text-amber-400 font-bold mb-1 border-b border-gray-800 pb-0.5 flex justify-between items-center shrink-0">
+                        <span>📜 當前牌面暫存 (最新牌顯示在第一位)</span>
+                    </div>
+
+                    <!-- 暫存卡牌區 -->
+                    <div class="bg-black/60 p-1.5 rounded border border-gray-700 mb-1.5 min-h-[38px] max-h-[76px] overflow-y-auto no-scrollbar shrink-0">
+                        <div id="current-card-buffer" class="flex gap-1 items-center flex-wrap text-xs font-mono font-bold">
+                            <span class="text-gray-500 text-[10px]">尚無點選卡牌</span>
+                        </div>
+                    </div>
+
+                    <!-- 莊勝 / 閒勝 / 和局 控制鈕 -->
+                    <div class="grid grid-cols-3 gap-1 mb-1.5 shrink-0">
+                        <button onclick="submitHandWithWinner('B')" class="py-1.5 bg-red-950/80 hover:bg-red-900 border border-red-500/80 text-red-300 rounded font-black text-xs active:scale-95 transition">🔴 莊勝</button>
+                        <button onclick="submitHandWithWinner('P')" class="py-1.5 bg-blue-950/80 hover:bg-blue-900 border border-blue-500/80 text-blue-300 rounded font-black text-xs active:scale-95 transition">🔵 閒勝</button>
+                        <button onclick="submitHandWithWinner('T')" class="py-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/80 text-emerald-300 rounded font-black text-xs active:scale-95 transition">🟢 和局</button>
+                    </div>
+
+                    <!-- 歷史牌組紀錄清單 (已移除右側 ❌ 刪除按鈕) -->
+                    <div id="hand-history" class="flex-1 min-h-0 overflow-y-auto text-[9px] space-y-1 no-scrollbar pr-0.5">
+                        <div class="text-center text-gray-500 mt-2 font-bold">尚無紀錄</div>
+                    </div>
+                </div>
+
+            </section>
+
+        </main>
+    </div>
+
+    <!-- 邏輯腳本 -->
+    <script>
+        const MASTER_PASSWORD = "58821817";
+        const myClientId = 'baccarat_dev_' + Math.random().toString(36).substr(2, 9);
+
+        const MIN_BET = 30;   
+        let maxBetLimit = 3000; 
+
+        let currentMode = 'spectate'; 
+        let roadHistory = []; 
+        
+        let initialCapital = 10000;
+        let currentBankroll = 10000;
+        let baseBetUnit = 100; 
+        let nextBetAmount = 100;
+        let cableStep = 1;
+
+        let mqttClient = null;
+        let currentRoomTopic = "";
+        let isRemoteUpdating = false;
+
+        // 記牌狀態
+        let cardRemains = { 1: 32, 2: 32, 3: 32, 4: 32, 5: 32, 6: 32, 7: 32, 8: 32, 9: 32, 0: 128 };
+        let cardsDealt = 0;
+        let currentCardBuffer = [];
+
+        // 替換目標暫存
+        let replaceTarget = { handIndex: -1, cardIndex: -1 };
+
+        /* 🔒 密碼驗證 */
+        function getTodayTempCodes() {
+            let d = new Date();
+            let dateStr = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+            let codes = [];
+            let usedCodes = JSON.parse(localStorage.getItem("bac_used_temp_codes") || "[]");
+
+            for (let i = 0; i < 6; i++) {
+                let seed = 0;
+                let str = dateStr + "_" + MASTER_PASSWORD + "_salt_" + i;
+                for (let j = 0; j < str.length; j++) {
+                    seed = (seed * 1664525 + str.charCodeAt(j) + 1013904223) % 1000000;
+                }
+                let codeStr = Math.abs(seed).toString().padStart(6, '0');
+                codes.push({ code: codeStr, used: usedCodes.includes(codeStr) });
+            }
+            return codes;
+        }
+
+        function renderTempCodesList(codesObj) {
+            let gridEl = document.getElementById("tempCodesGrid");
+            gridEl.innerHTML = codesObj.map((item, idx) => `
+                <div class="temp-code-item ${item.used ? 'used' : ''}">
+                    <span>#${idx+1}: ${item.code}</span><span class="temp-code-status">${item.used ? '已用' : '可用'}</span>
+                </div>`).join("");
+        }
+
+        function checkPassword() {
+            let inputVal = document.getElementById("txtPassword").value.trim();
+            let errEl = document.getElementById("loginError");
+            let tempBox = document.getElementById("tempCodeBox");
+            let todayCodes = getTodayTempCodes();
+
+            if (inputVal === MASTER_PASSWORD) {
+                renderTempCodesList(todayCodes);
+                tempBox.style.display = "block"; 
+                errEl.innerText = "";
+                localStorage.setItem("bac_login_time", new Date().getTime().toString());
+                setTimeout(() => {
+                    document.getElementById("loginOverlay").style.display = "none";
+                    document.getElementById("appContainer").style.display = "flex"; 
+                    initApp();
+                }, 6000);
+                return;
+            }
+
+            let matchedIndex = todayCodes.findIndex(c => c.code === inputVal);
+            if (matchedIndex !== -1) {
+                let matched = todayCodes[matchedIndex];
+                if (matched.used) {
+                    errEl.innerText = `❌ 第 #${matchedIndex+1} 組臨時通行碼已被使用！`;
+                    document.getElementById("txtPassword").value = ""; 
+                    return;
+                }
+                let usedCodes = JSON.parse(localStorage.getItem("bac_used_temp_codes") || "[]");
+                usedCodes.push(inputVal);
+                localStorage.setItem("bac_used_temp_codes", JSON.stringify(usedCodes));
+                localStorage.setItem("bac_login_time", new Date().getTime().toString());
+
+                document.getElementById("loginOverlay").style.display = "none";
+                document.getElementById("appContainer").style.display = "flex";
+                initApp();
+                return;
+            }
+
+            errEl.innerText = "❌ 密碼錯誤，請重新輸入";
+            document.getElementById("txtPassword").value = ""; 
+        }
+
+        /* 📡 雙機連動 MQTT 邏輯 */
+        function toggleSyncPanel() {
+            document.getElementById("syncPanel").classList.toggle("active");
+        }
+
+        function initMqtt(topicCode, onConnectCallback) {
+            let statusEl = document.getElementById("syncStatus");
+            statusEl.innerText = "⏳ 連線中...";
+
+            if (mqttClient) { mqttClient.end(); }
+
+            mqttClient = mqtt.connect("wss://broker.emqx.io:8084/mqtt", {
+                clientId: myClientId,
+                keepalive: 30
+            });
+
+            mqttClient.on('connect', () => {
+                currentRoomTopic = "bac_relay_v1_" + topicCode;
+                mqttClient.subscribe(currentRoomTopic, (err) => {
+                    if (!err && onConnectCallback) onConnectCallback();
+                });
+            });
+
+            mqttClient.on('message', (t, message) => {
+                try {
+                    let data = JSON.parse(message.toString());
+                    if (!data || data.senderId === myClientId) return;
+
+                    if (data.type === 'REQ_STATE') {
+                        broadcastState();
+                    } else if (data.type === 'RELAY_STATE') {
+                        isRemoteUpdating = true;
+                        roadHistory = data.state.roadHistory || [];
+                        initialCapital = data.state.initialCapital || 10000;
+                        currentBankroll = data.state.currentBankroll || 10000;
+                        maxBetLimit = data.state.maxBetLimit || 3000;
+                        cableStep = data.state.cableStep || 1;
+                        if (data.state.cardRemains) cardRemains = data.state.cardRemains;
+                        if (data.state.cardsDealt) cardsDealt = data.state.cardsDealt;
+
+                        document.getElementById('input-capital').value = initialCapital;
+                        document.getElementById('input-max-bet').value = maxBetLimit;
+                        
+                        renderMatrix();
+                        renderHistoryList();
+                        updateCardRemainsUI();
+                        calculateNextBet();
+                        renderUI();
+                        runAdvancedAIAnalysis();
+                        isRemoteUpdating = false;
+                    }
+                } catch(e) {}
+            });
+
+            mqttClient.on('error', () => { statusEl.innerText = "🔴 連線失敗"; });
+        }
+
+        function createRoom() {
+            let randomCode = Math.floor(1000 + Math.random() * 9000).toString();
+            initMqtt(randomCode, () => {
+                let statusEl = document.getElementById("syncStatus");
+                statusEl.innerHTML = `🟢 房號: <b class="text-neonGreen text-xs">${randomCode}</b>`;
+                broadcastState();
+            });
+        }
+
+        function joinRoom() {
+            let inputCode = document.getElementById("txtRoomId").value.trim();
+            if (!inputCode || inputCode.length !== 4) { alert("請輸入 4 位數正確房號！"); return; }
+            initMqtt(inputCode, () => {
+                let statusEl = document.getElementById("syncStatus");
+                statusEl.innerHTML = `🟢 已連線房號: <b class="text-neonCyan text-xs">${inputCode}</b>`;
+                mqttClient.publish(currentRoomTopic, JSON.stringify({ type: 'REQ_STATE', senderId: myClientId }));
+            });
+        }
+
+        function broadcastState() {
+            if (mqttClient && mqttClient.connected && currentRoomTopic && !isRemoteUpdating) {
+                mqttClient.publish(currentRoomTopic, JSON.stringify({
+                    type: 'RELAY_STATE',
+                    senderId: myClientId,
+                    state: {
+                        roadHistory: roadHistory,
+                        initialCapital: initialCapital,
+                        currentBankroll: currentBankroll,
+                        maxBetLimit: maxBetLimit,
+                        cableStep: cableStep,
+                        cardRemains: cardRemains,
+                        cardsDealt: cardsDealt,
+                        strategy: document.getElementById('select-strategy').value
+                    }
+                }));
+            }
+        }
+
+        /* 🃏 記牌區邏輯 (直覺點擊發牌) */
+        function inputCard(label, val) {
+            if (cardRemains[val] <= 0) return;
+            cardRemains[val]--;
+            cardsDealt++;
+            currentCardBuffer.push({label, val});
+            
+            updateCardRemainsUI();
+            updateCurrentHandUI();
+            broadcastState();
+        }
+
+        function burnCard() {
+            if (cardRemains[0] > 0) {
+                cardRemains[0]--;
+                cardsDealt++;
+                updateCardRemainsUI();
+                broadcastState();
+            }
+        }
+
+        function popLastBufferCard() {
+            if (currentCardBuffer.length > 0) {
+                let lastCard = currentCardBuffer.pop();
+                cardRemains[lastCard.val]++;
+                cardsDealt--;
+                updateCardRemainsUI();
+                updateCurrentHandUI();
+                broadcastState();
+            }
+        }
+
+        function clearCurrentBuffer() {
+            while (currentCardBuffer.length > 0) {
+                let c = currentCardBuffer.pop();
+                cardRemains[c.val]++;
+                cardsDealt--;
+            }
+            updateCardRemainsUI();
+            updateCurrentHandUI();
+        }
+
+        function updateCardRemainsUI() {
+            for (let i = 0; i <= 9; i++) {
+                document.getElementById(`rem-${i}`).innerText = `剩 ${cardRemains[i]}`;
+            }
+            document.getElementById('shoe-progress').innerText = `${cardsDealt} / 416`;
+        }
+
+        /* 更新暫存區 (醒目黃標示最新牌) */
+        function updateCurrentHandUI() {
+            const container = document.getElementById('current-card-buffer');
+            if (currentCardBuffer.length === 0) {
+                container.innerHTML = '<span class="text-gray-500 text-[10px]">尚無點選卡牌</span>';
+            } else {
+                let reversedBuffer = [...currentCardBuffer].reverse();
+                container.innerHTML = reversedBuffer.map((c, index) => {
+                    if (index === 0) {
+                        return `<span class="px-2 py-0.5 bg-yellow-500/30 border-2 border-yellow-400 text-yellow-300 rounded-md font-black shadow-neon-green animate-pulse">⭐ ${c.label}</span>`;
+                    } else {
+                        return `<span class="px-1.5 py-0.5 bg-cyan-950 border border-cyan-500/40 text-neonCyan rounded font-bold">${c.label}</span>`;
+                    }
+                }).join('');
+            }
+        }
+
+        /* 一鍵勝負結算並寫入大路與歷史 */
+        function submitHandWithWinner(winnerType) {
+            let handCards = [...currentCardBuffer];
+            
+            if (currentMode === 'betting') {
+                executeRealBet(winnerType, handCards);
+            } else {
+                addSpectateResult(winnerType, handCards);
+            }
+
+            currentCardBuffer = [];
+            updateCurrentHandUI();
+        }
+
+        /* 渲染歷史列表 (卡牌點擊可跳彈窗選擇新點數替換) */
+        function renderHistoryList() {
+            const histEl = document.getElementById('hand-history');
+            if (!roadHistory || roadHistory.length === 0) {
+                histEl.innerHTML = '<div class="text-center text-gray-500 mt-2 font-bold">尚無紀錄</div>';
+                return;
+            }
+
+            let html = '';
+            for (let i = roadHistory.length - 1; i >= 0; i--) {
+                let item = roadHistory[i];
+                let type = typeof item === 'object' ? item.type : item;
+                let cards = (typeof item === 'object' && item.cards) ? item.cards : [];
+                
+                let tColor = type === 'B' ? 'text-bankerRed' : (type === 'P' ? 'text-playerBlue' : 'text-tieGreen');
+                let tStr = type === 'B' ? '莊勝' : (type === 'P' ? '閒勝' : '和局');
+                
+                let cardsHtml = '';
+                if (cards.length > 0) {
+                    cardsHtml = cards.map((c, cIdx) => `
+                        <span onclick="openCardReplaceModal(${i}, ${cIdx})" 
+                              class="px-1.5 py-0.5 bg-gray-800 border border-gray-700 hover:border-cyan-400 hover:text-neonCyan text-cyan-300 rounded font-mono font-bold cursor-pointer transition active:scale-95 inline-block" 
+                              title="點擊替換點數">${c.label}</span>
+                    `).join('');
+                } else {
+                    cardsHtml = '<span class="text-gray-500 text-[8.5px]">直記勝負</span>';
+                }
+
+                html += `
+                <div class="flex justify-between items-center bg-gray-900/80 p-1 rounded border border-gray-800 my-0.5">
+                    <div class="flex items-center gap-1.5 overflow-hidden flex-wrap">
+                        <span class="font-bold ${tColor} shrink-0">${tStr}</span>
+                        <div class="flex gap-1 items-center flex-wrap">
+                            ${cardsHtml}
+                        </div>
+                    </div>
+                </div>`;
+            }
+            histEl.innerHTML = html;
+        }
+
+        /* 🔄 替換彈窗控制邏輯 */
+        function openCardReplaceModal(handIndex, cardIndex) {
+            replaceTarget = { handIndex, cardIndex };
+            let hand = roadHistory[handIndex];
+            if (hand && hand.cards && hand.cards[cardIndex]) {
+                let currentLabel = hand.cards[cardIndex].label;
+                document.getElementById('replaceModalSub').innerText = `目前 [ ${currentLabel} ] → 點擊下方進行替換`;
+                document.getElementById('cardReplaceModal').classList.remove('hidden');
+            }
+        }
+
+        function closeReplaceModal() {
+            document.getElementById('cardReplaceModal').classList.add('hidden');
+            replaceTarget = { handIndex: -1, cardIndex: -1 };
+        }
+
+        function confirmCardReplace(newVal, newLabel) {
+            let { handIndex, cardIndex } = replaceTarget;
+            if (handIndex >= 0 && handIndex < roadHistory.length) {
+                let hand = roadHistory[handIndex];
+                if (hand && hand.cards && hand.cards[cardIndex]) {
+                    if (cardRemains[newVal] <= 0) {
+                        alert(`點數 [ ${newLabel} ] 已無剩餘張數！`);
+                        return;
+                    }
+                    let oldCard = hand.cards[cardIndex];
+                    // 歸還舊牌庫存
+                    cardRemains[oldCard.val]++;
+                    cardsDealt--;
+                    // 扣除新牌庫存
+                    cardRemains[newVal]--;
+                    cardsDealt++;
+                    // 替換
+                    hand.cards[cardIndex] = { label: newLabel, val: newVal };
+
+                    updateCardRemainsUI();
+                    renderHistoryList();
+                    runAdvancedAIAnalysis();
+                    broadcastState();
+                }
+            }
+            closeReplaceModal();
+        }
+
+        function deleteTargetCardOnly() {
+            let { handIndex, cardIndex } = replaceTarget;
+            if (handIndex >= 0 && handIndex < roadHistory.length) {
+                deleteSingleCardFromHistory(handIndex, cardIndex);
+            }
+            closeReplaceModal();
+        }
+
+        function deleteSingleCardFromHistory(handIndex, cardIndex) {
+            if (handIndex >= 0 && handIndex < roadHistory.length) {
+                let hand = roadHistory[handIndex];
+                if (hand && hand.cards && hand.cards.length > cardIndex) {
+                    let removedCard = hand.cards.splice(cardIndex, 1)[0];
+                    if (removedCard && cardRemains[removedCard.val] !== undefined) {
+                        cardRemains[removedCard.val]++;
+                        cardsDealt--;
+                    }
+                    updateCardRemainsUI();
+                    renderHistoryList();
+                    runAdvancedAIAnalysis();
+                    broadcastState();
+                }
+            }
+        }
+
+        /* 🎲 大路與下三路計算 */
+        function clampBet(amount) {
+            return Math.max(MIN_BET, Math.min(maxBetLimit, Math.round(amount)));
+        }
+
+        /* 刪除整局紀錄並還原該局全部卡牌與資產 */
+        function deleteSingleResult(index) {
+            if (index >= 0 && index < roadHistory.length) {
+                let removed = roadHistory.splice(index, 1)[0];
+                if (removed && typeof removed === 'object') {
+                    // 自動歸還該局全部卡牌數
+                    if (removed.cards && removed.cards.length > 0) {
+                        removed.cards.forEach(c => {
+                            if (cardRemains[c.val] !== undefined) {
+                                cardRemains[c.val]++;
+                                cardsDealt--;
+                            }
+                        });
+                    }
+                    // 扣回下注資產與纜層
+                    if (removed.isBet) {
+                        currentBankroll -= (removed.delta || 0);
+                        if (index === roadHistory.length) {
+                            cableStep = removed.prevCableStep || 1;
+                        }
+                    }
+                }
+                updateCardRemainsUI();
+                renderMatrix();
+                renderHistoryList();
+                calculateNextBet();
+                renderUI();
+                runAdvancedAIAnalysis();
+                broadcastState();
+            }
+        }
+
+        function popResult() {
+            if (roadHistory.length > 0) {
+                deleteSingleResult(roadHistory.length - 1);
+            }
+        }
+
+        function buildBigRoadColumns(history) {
+            let columns = [];
+            let curCol = [];
+            let curResult = null;
+
+            for (let item of history) {
+                let type = typeof item === 'object' ? item.type : item;
+                if (type === 'T') continue;
+                if (curResult === null) {
+                    curResult = type;
+                    curCol.push(type);
+                } else if (type === curResult) {
+                    curCol.push(type);
+                } else {
+                    columns.push(curCol);
+                    curCol = [type];
+                    curResult = type;
+                }
+            }
+            if (curCol.length > 0) columns.push(curCol);
+            return columns;
+        }
+
+        function calculateDownRoad(columns, shift) {
+            let results = [];
+            if (columns.length <= shift) return results;
+
+            for (let c = shift; c < columns.length; c++) {
+                let col = columns[c];
+                let startRow = (c === shift) ? 1 : 0;
+
+                for (let r = startRow; r < col.length; r++) {
+                    if (r === 0) {
+                        let len1 = columns[c - 1].length;
+                        let len2 = columns[c - 1 - shift].length;
+                        results.push(len1 === len2 ? 'red' : 'blue');
+                    } else {
+                        let targetCol = columns[c - shift];
+                        if (targetCol.length >= r + 1) {
+                            results.push('red');
+                        } else if (targetCol.length === r) {
+                            results.push('blue');
+                        } else {
+                            results.push('red');
+                        }
+                    }
+                }
+            }
+            return results;
+        }
+
+        function predictAskRoad(targetType) {
+            let tempHistory = [...roadHistory, { type: targetType, isBet: false }];
+            let cols = buildBigRoadColumns(tempHistory);
+            
+            let bigEye = calculateDownRoad(cols, 1);
+            let small = calculateDownRoad(cols, 2);
+            let cockroach = calculateDownRoad(cols, 3);
+
+            let lastBigEye = bigEye.length > 0 ? bigEye[bigEye.length - 1] : null;
+            let lastSmall = small.length > 0 ? small[small.length - 1] : null;
+            let lastCockroach = cockroach.length > 0 ? cockroach[cockroach.length - 1] : null;
+
+            let redCount = 0;
+            let blueCount = 0;
+
+            [lastBigEye, lastSmall, lastCockroach].forEach(c => {
+                if (c === 'red') redCount++;
+                if (c === 'blue') blueCount++;
+            });
+
+            return { redCount, blueCount };
+        }
+
+        function resetCapitalSettings() {
+            const capitalInput = parseFloat(document.getElementById('input-capital').value);
+            const limitInput = parseFloat(document.getElementById('input-max-bet').value);
+
+            if (!isNaN(limitInput) && limitInput > 0) maxBetLimit = limitInput;
+            if (!isNaN(capitalInput) && capitalInput > 0) {
+                initialCapital = capitalInput;
+                let totalDelta = roadHistory.reduce((sum, item) => sum + ((typeof item === 'object' && item.delta) ? item.delta : 0), 0);
+                currentBankroll = initialCapital + totalDelta;
+                baseBetUnit = clampBet(initialCapital * 0.01); 
+                calculateNextBet();
+                renderUI();
+                broadcastState();
+            }
+        }
+
+        function updateStrategyOnly() {
+            calculateNextBet();
+            renderUI();
+            runAdvancedAIAnalysis();
+            broadcastState();
+        }
+
+        function calculateNextBet() {
+            const strategy = document.getElementById('select-strategy').value;
+            let rawBet = baseBetUnit;
+
+            if (strategy === 'parlay2') {
+                if (cableStep > 2) cableStep = 1;
+                rawBet = baseBetUnit * Math.pow(2, cableStep - 1);
+                document.getElementById('ai-cable-stage').innerText = `2連勝第 ${cableStep}/2 層 (${clampBet(rawBet)})`;
+            } else if (strategy === 'flat') {
+                rawBet = baseBetUnit;
+                document.getElementById('ai-cable-stage').innerText = `平注 (${clampBet(rawBet)})`;
+            } else if (strategy === 'parlay5') {
+                if (cableStep > 5) cableStep = 1;
+                rawBet = baseBetUnit * Math.pow(2, cableStep - 1);
+                document.getElementById('ai-cable-stage').innerText = `5連勝第 ${cableStep}/5 層 (${clampBet(rawBet)})`;
+            }
+
+            nextBetAmount = clampBet(rawBet);
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            const tabSpectate = document.getElementById('tab-spectate');
+            const tabBetting = document.getElementById('tab-betting');
+
+            if (mode === 'spectate') {
+                tabSpectate.className = "py-1 rounded font-bold border bg-cyan-950 text-neonCyan border-cyan-500 shadow-neon-cyan transition";
+                tabBetting.className = "py-1 rounded font-bold border bg-gray-900 text-gray-400 border-gray-800 transition";
+            } else {
+                tabBetting.className = "py-1 rounded font-bold border bg-yellow-950 text-yellow-300 border-yellow-500 shadow-neon-green transition";
+                tabSpectate.className = "py-1 rounded font-bold border bg-gray-900 text-gray-400 border-gray-800 transition";
+            }
+        }
+
+        function addSpectateResult(type, handCards = []) {
+            roadHistory.push({
+                type: type,
+                isBet: false,
+                delta: 0,
+                prevCableStep: cableStep,
+                newCableStep: cableStep,
+                cards: handCards
+            });
+            renderMatrix();
+            renderHistoryList();
+            runAdvancedAIAnalysis();
+            broadcastState();
+        }
+
+        function executeRealBet(actualResult, handCards = []) {
+            const aiTarget = document.getElementById('ai-recommendation').innerText; 
+            const strategy = document.getElementById('select-strategy').value;
+
+            let delta = 0;
+            let prevStep = cableStep;
+            let newStep = cableStep;
+
+            if (actualResult !== 'T') {
+                const betTargetCode = aiTarget === '莊' ? 'B' : 'P';
+                const isWin = (actualResult === betTargetCode);
+
+                if (isWin) {
+                    delta = nextBetAmount;
+                    currentBankroll += delta;
+                    if (strategy === 'parlay2') {
+                        newStep = cableStep + 1;
+                        if (newStep > 2) newStep = 1;
+                    } else if (strategy === 'parlay5') {
+                        newStep = cableStep + 1;
+                        if (newStep > 5) newStep = 1;
+                    }
+                } else {
+                    delta = -nextBetAmount;
+                    currentBankroll += delta;
+                    if (strategy === 'parlay2' || strategy === 'parlay5') {
+                        newStep = 1; 
+                    }
+                }
+            }
+
+            cableStep = newStep;
+
+            roadHistory.push({
+                type: actualResult,
+                isBet: true,
+                delta: delta,
+                prevCableStep: prevStep,
+                newCableStep: newStep,
+                cards: handCards
+            });
+
+            renderMatrix();
+            renderHistoryList();
+            calculateNextBet();
+            renderUI();
+            runAdvancedAIAnalysis();
+            broadcastState();
+        }
+
+        /* 清空按鈕 */
+        function clearMatrix() {
+            roadHistory = [];
+            cableStep = 1;
+            currentBankroll = initialCapital;
+
+            for (let i = 1; i <= 9; i++) cardRemains[i] = 32;
+            cardRemains[0] = 128;
+            cardsDealt = 0;
+            currentCardBuffer = [];
+
+            calculateNextBet();
+            updateCardRemainsUI();
+            updateCurrentHandUI();
+            renderMatrix();
+            renderHistoryList();
+            renderUI();
+            runAdvancedAIAnalysis();
+            broadcastState();
+        }
+
+        function renderUI() {
+            const netProfit = currentBankroll - initialCapital;
+            document.getElementById('display-current-bankroll').innerText = currentBankroll.toLocaleString();
+            
+            const profitEl = document.getElementById('display-net-profit');
+            profitEl.innerText = (netProfit >= 0 ? '+' : '') + netProfit.toLocaleString();
+            profitEl.className = netProfit >= 0 ? "font-bold text-bankerRed text-xs" : "font-bold text-neonGreen text-xs";
+
+            document.getElementById('display-next-bet').innerText = nextBetAmount.toLocaleString();
+        }
+
+        function renderMatrix() {
+            const container = document.getElementById('road-matrix');
+            container.innerHTML = '';
+
+            roadHistory.forEach((item, index) => {
+                const type = typeof item === 'object' ? item.type : item;
+                const circle = document.createElement('div');
+                circle.onclick = () => deleteSingleResult(index);
+                circle.title = `點擊刪除第 ${index + 1} 局`;
+                circle.className = 'w-[20px] h-[20px] rounded-full flex items-center justify-center font-black text-[10px] border shadow-sm cursor-pointer hover:opacity-50 hover:scale-125 transition-all';
+                
+                if (type === 'B') {
+                    circle.innerText = '莊';
+                    circle.className += ' bg-red-950/80 border-red-500 text-red-400';
+                } else if (type === 'P') {
+                    circle.innerText = '閒';
+                    circle.className += ' bg-blue-950/80 border-blue-500 text-blue-400';
+                } else {
+                    circle.innerText = '和';
+                    circle.className += ' bg-emerald-950/80 border-emerald-500 text-emerald-400';
+                }
+                container.appendChild(circle);
+            });
+        }
+
+        /* 🧠 AI 演算法 */
+        function runAdvancedAIAnalysis() {
+            const rawTypes = roadHistory.map(x => typeof x === 'object' ? x.type : x);
+            const filtered = rawTypes.filter(x => x !== 'T');
+            const recEl = document.getElementById('ai-recommendation');
+            const confEl = document.getElementById('ai-confidence');
+            const patternEl = document.getElementById('ai-pattern');
+
+            if (filtered.length < 3) {
+                recEl.innerText = '觀望';
+                confEl.innerText = '50%';
+                patternEl.innerText = '請輸入數據開始分析';
+                document.getElementById('stat-big-eye').innerText = '-';
+                document.getElementById('stat-small-road').innerText = '-';
+                document.getElementById('stat-cockroach').innerText = '-';
+                return;
+            }
+
+            const askB = predictAskRoad('B');
+            const askP = predictAskRoad('P');
+
+            const cols = buildBigRoadColumns(roadHistory);
+            const bigEye = calculateDownRoad(cols, 1);
+            const small = calculateDownRoad(cols, 2);
+            const cockroach = calculateDownRoad(cols, 3);
+
+            document.getElementById('stat-big-eye').innerText = bigEye.length > 0 ? (bigEye[bigEye.length-1] === 'red' ? '🔴' : '🔵') : '-';
+            document.getElementById('stat-small-road').innerText = small.length > 0 ? (small[small.length-1] === 'red' ? '🔴' : '🔵') : '-';
+            document.getElementById('stat-cockroach').innerText = cockroach.length > 0 ? (cockroach[cockroach.length-1] === 'red' ? '🔴' : '🔵') : '-';
+
+            let roadRec = '觀望';
+            let roadConf = 60;
+
+            if (askB.redCount > askP.redCount) {
+                roadRec = '莊';
+                roadConf = Math.min(88, 65 + askB.redCount * 7);
+            } else if (askP.redCount > askB.redCount) {
+                roadRec = '閒';
+                roadConf = Math.min(88, 65 + askP.redCount * 7);
+            } else {
+                const last = filtered[filtered.length - 1];
+                roadRec = last === 'B' ? '莊' : '閒';
+                roadConf = 62;
+            }
+
+            let bigCardsLeft = (cardRemains[7] + cardRemains[8] + cardRemains[9] + cardRemains[0]);
+            let smallCardsLeft = (cardRemains[1] + cardRemains[2] + cardRemains[3] + cardRemains[4] + cardRemains[5] + cardRemains[6]);
+            let totalLeft = (416 - cardsDealt) || 1;
+
+            let bigRatio = bigCardsLeft / totalLeft;
+            let cardBiasTarget = 'NONE';
+
+            if (bigRatio > 0.58) {
+                cardBiasTarget = 'P';
+            } else if (bigRatio < 0.48) {
+                cardBiasTarget = 'B';
+            }
+
+            let finalRec = roadRec;
+            let finalConf = roadConf;
+
+            if (cardBiasTarget !== 'NONE' && cardBiasTarget !== roadRec) {
+                finalConf = Math.max(52, roadConf - 18);
+                patternEl.innerText = `問路偏${roadRec}但牌庫殘量衝突 (防護降規)`;
+                if (finalConf <= 58) {
+                    finalRec = '觀望';
+                }
+            } else if (cardBiasTarget !== 'NONE' && cardBiasTarget === roadRec) {
+                finalConf = Math.min(92, roadConf + 8);
+                patternEl.innerText = `問路與牌庫大牌比重雙重看好 (${finalRec})`;
+            } else {
+                patternEl.innerText = `下三路規律: ${askB.redCount > askP.redCount ? '莊問路三紅' : (askP.redCount > askB.redCount ? '閒問路三紅' : '趨勢跟龍')}`;
+            }
+
+            recEl.innerText = finalRec;
+            confEl.innerText = finalConf + '%';
+        }
+
+        function initApp() {
+            resetCapitalSettings();
+            updateCardRemainsUI();
+            updateCurrentHandUI();
+            renderMatrix();
+            renderHistoryList();
+            runAdvancedAIAnalysis();
+        }
+
+        window.addEventListener("DOMContentLoaded", () => {
+            let loginTime = localStorage.getItem("bac_login_time");
+            let nowTime = new Date().getTime();
+
+            if (!loginTime || (nowTime - parseInt(loginTime) >= 24 * 60 * 60 * 1000)) {
+                localStorage.removeItem("bac_login_time");
+                document.getElementById("txtPassword").focus();
+            } else {
+                document.getElementById("loginOverlay").style.display = "none";
+                document.getElementById("appContainer").style.display = "flex";
+                initApp();
+            }
+        });
+    </script>
+</body>
+</html>
